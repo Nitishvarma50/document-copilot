@@ -22,23 +22,23 @@ This checklist turns `Docs/architecture.md` and `Docs/client_brief.md` into an i
 
 - [x] Create the SEC filing downloader in `Data/download.py`.
 - [x] Configure SEC requests with a descriptive `SEC_USER_AGENT`.
-- [x] Download only the configured 10-K target years: 2021–2025.
+- [x] Download 10-Ks from the previous five complete filing years using a dynamic lookback.
 - [x] Skip a company/year when that filing already exists locally.
 - [x] Write a manifest containing filing metadata and local relative paths.
-- [ ] Decide whether the pilot corpus contains the five companies in the brief or all ten companies in `Data/download.py`.
-- [ ] Make the company list and target years a single documented configuration.
-- [ ] Resolve missing filings before ingestion; the current dataset has fewer than five filings for some companies.
+- [x] Use the five-company pilot from the client brief: Apple, Amazon, Alphabet, Microsoft, and NVIDIA.
+- [x] Use `config/corpus.json` as the documented source of truth for companies, forms, and target filing years.
+- [x] Resolve missing filings and verify 25 unique company/year filings before ingestion.
 - [x] Keep `.env`, downloaded filings, and Python cache files out of Git.
 - [x] Add setup instructions to `README.md`.
-- [ ] Add a `LICENSE` or document the project's internal-only status.
-- [ ] Add a basic CI workflow for formatting, type checking, tests, and build checks.
+- [x] Document the project's internal-only status in `README.md`.
+- [x] Add a basic CI workflow for formatting, type checking, tests, and build checks.
 
 ### Phase 0 verification
 
 - [ ] `uv sync` succeeds on a clean checkout.
 - [ ] The downloader fails clearly when `SEC_USER_AGENT` is not configured.
-- [ ] The downloader can be run twice without redownloading existing company/year filings.
-- [ ] The manifest contains the expected number of unique company/year records.
+- [x] The downloader can be run twice without redownloading existing company/year filings.
+- [x] The manifest contains 25 expected unique company/year records.
 
 ---
 
