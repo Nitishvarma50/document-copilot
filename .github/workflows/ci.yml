@@ -2,20 +2,27 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   python:
-    name: Python checks
+    name: Python quality and tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       UV_PYTHON: "3.12"
       UV_LINK_MODE: copy
+      # Safe placeholder for tests; no production credentials are required.
+      SEC_USER_AGENT: "document-copilot ci@example.invalid"
 
     steps:
       - name: Check out repository
@@ -32,17 +39,23 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --locked --all-groups
 
-      - name: Lint
-        run: uv run ruff check .
+      - name: Lint Python
+        run: uv run ruff check Data Backend tests main.py
 
       - name: Check formatting
-        run: uv run ruff format --check .
+        run: uv run ruff format --check Data Backend tests main.py
 
-      - name: Type check
-        run: uv run mypy Data main.py tests
+      # Backend imports currently use an application-root layout. Full backend
+      # mypy coverage will be enabled after that package layout is finalized.
+      - name: Type check stable Python packages
+        run: uv run mypy Data main.py tests --exclude 'tests/backend'
 
       - name: Run tests
         run: uv run pytest
 
       - name: Compile Python files
-        run: uv run python -m compileall -q Data main.py tests
+        run: uv run python -m compileall -q Data Backend tests main.py
+
+      - name: Validate Alembic migration discovery
+        working-directory: Backend
+        run: uv run alembic heads

@@ -6,7 +6,7 @@ import pytest
 
 from Data.download import load_corpus_config, validate_corpus_config
 
-CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "corpus.json"
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "Data" / "config" / "corpus.json"
 
 
 def test_repository_corpus_config_is_valid() -> None:
