@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -38,16 +39,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Stable identity also prevents chat-loading effects from rerunning on token refresh.
+  const signOut = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  }, []);
+
   const value = useMemo(
     () => ({
       session,
       user: session?.user ?? null,
       isLoading,
-      signOut: async () => {
-        await supabase.auth.signOut();
-      },
+      signOut,
     }),
-    [isLoading, session],
+    [isLoading, session, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

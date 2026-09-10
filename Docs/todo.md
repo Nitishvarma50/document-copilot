@@ -1,432 +1,123 @@
-# Document Copilot Implementation Checklist
+# Document Copilot — Resume Project Checklist
 
-This checklist turns `Docs/architecture.md` and `Docs/client_brief.md` into an implementation plan. Work from top to bottom. Do not move to the next phase until the verification items for the current phase pass.
+This is a portfolio project, so the goal is a clear end-to-end demo rather than a production platform. The MVP is complete when a reviewer can sign in, ask a question about the SEC filing corpus, receive a streamed answer with citations, and reopen the saved conversation.
 
-## Definition of done
+## MVP status
 
-- [ ] A Driftwood analyst can sign in with a Driftwood email address.
-- [ ] An analyst can ask questions about the curated SEC filing corpus from a browser.
-- [ ] Answers are grounded only in retrieved filing passages.
-- [ ] Every supported factual answer includes filing and page/section citations.
-- [ ] The UI shows the cited source passage for verification.
-- [ ] Analysts can create threads and view their own conversation history.
-- [ ] The system refuses or clearly reports insufficient evidence instead of guessing.
-- [ ] No user can access another user's threads or messages.
-- [ ] The pilot corpus supports the ten example analyst questions in the client brief.
-- [ ] Five senior analysts can use the system for a week without data loss or blocking errors.
-- [ ] The pilot demonstrates at least three hours saved per analyst per week.
+- [x] Download and normalize a small SEC filing corpus.
+- [x] Create the authenticated backend and database schema.
+- [x] Create the authentication and conversation-history UI.
+- [ ] Ingest document chunks and embeddings into Supabase.
+- [ ] Retrieve relevant filing passages for a question.
+- [ ] Generate a grounded answer with citations.
+- [ ] Connect message sending and streaming in the frontend.
+- [ ] Deploy a working demo.
 
 ---
 
-## Phase 0 — Decisions and project hygiene
+## Already implemented
 
-- [x] Create the SEC filing downloader in `Data/download.py`.
-- [x] Configure SEC requests with a descriptive `SEC_USER_AGENT`.
-- [x] Download 10-Ks from the previous five complete filing years using a dynamic lookback.
-- [x] Skip a company/year when that filing already exists locally.
-- [x] Write a manifest containing filing metadata and local relative paths.
-- [x] Use the five-company pilot from the client brief: Apple, Amazon, Alphabet, Microsoft, and NVIDIA.
-- [x] Use `config/corpus.json` as the documented source of truth for companies, forms, and target filing years.
-- [x] Resolve missing filings and verify 25 unique company/year filings before ingestion.
-- [x] Keep `.env`, downloaded filings, and Python cache files out of Git.
-- [x] Add setup instructions to `README.md`.
-- [x] Document the project's internal-only status in `README.md`.
-- [x] Add a basic CI workflow for formatting, type checking, tests, and build checks.
+### Project setup and corpus
 
-### Phase 0 verification
+- [x] Configure the project with `uv`, Python 3.12+, and environment examples.
+- [x] Add Python and frontend CI jobs.
+- [x] Add tests, Ruff, mypy, ESLint, and production-build checks.
+- [x] Configure the five-company corpus in `Data/config/corpus.json`.
+- [x] Download five years of 10-K filings with SEC metadata and an idempotent manifest.
+- [x] Convert all 25 selected filings to Markdown.
+- [x] Extract and preserve filing tables in Markdown and JSON.
 
-- [ ] `uv sync` succeeds on a clean checkout.
-- [ ] The downloader fails clearly when `SEC_USER_AGENT` is not configured.
-- [x] The downloader can be run twice without redownloading existing company/year filings.
-- [x] The manifest contains 25 expected unique company/year records.
+### Backend and database
 
----
+- [x] Create the FastAPI application with typed settings, CORS, and `GET /health`.
+- [x] Add Supabase bearer-token verification and authenticated `GET /auth/me`.
+- [x] Add SQLAlchemy models and Alembic migrations for users, threads, messages, documents, chunks, citations, and chat turns.
+- [x] Enable `pgvector`, vector and full-text indexes, and Row Level Security policies in the migration.
+- [x] Add authenticated APIs to create/list threads and load saved messages.
+- [x] Add owner-filtered chat reads and protected backend chat writes.
+- [x] Add persistent user/assistant turn handling with duplicate-request and interrupted-stream protection.
+- [x] Add an AI SDK-compatible text-only SSE endpoint with a clearly labelled stub response.
+- [x] Add mocked tests for authentication, chat APIs, persistence behavior, and migration rendering.
 
-## Phase 1 — Backend foundation
+### Frontend
 
-### 1.1 Backend project structure
+- [x] Create the Vite, React, and TypeScript application with protected routes.
+- [x] Implement Supabase email/password sign-up, sign-in, session restoration, and sign-out.
+- [x] Add the authenticated HTTP client and backend identity check.
+- [x] Build the responsive chat layout and conversation sidebar.
+- [x] Create, list, paginate, and open conversations.
+- [x] Load and render saved user and assistant messages.
+- [x] Add loading, empty, retry, session-expired, and API error states.
+- [x] Pass frontend ESLint and production build checks.
 
-- [ ] Create the backend package:
+### Current verification
 
-  ```text
-  backend/
-  ├── app/
-  │   ├── main.py
-  │   ├── config.py
-  │   ├── api/
-  │   ├── auth/
-  │   ├── assistant/
-  │   ├── chat/
-  │   ├── database/
-  │   ├── grounding/
-  │   ├── ingestion/
-  │   └── retrieval/
-  ├── alembic/
-  ├── alembic.ini
-  └── tests/
-  ```
-
-- [ ] Add FastAPI and Uvicorn.
-- [ ] Add `pydantic-settings` for typed backend configuration.
-- [ ] Add the Supabase Python client.
-- [ ] Add SQLAlchemy and Alembic.
-- [ ] Add `httpx` and structured logging.
-- [ ] Add OpenAI and PydanticAI dependencies.
-- [ ] Add a backend `pyproject.toml` or clearly define the workspace dependency layout.
-- [ ] Add `backend/app/config.py` as the only backend environment-variable access point.
-- [ ] Define typed settings for:
-  - [ ] `SUPABASE_URL`
-  - [ ] `SUPABASE_ANON_KEY`
-  - [ ] `SUPABASE_SERVICE_ROLE_KEY`
-  - [ ] `DATABASE_URL`
-  - [ ] `OPENAI_API_KEY`
-  - [ ] `ALLOWED_ORIGINS`
-  - [ ] Embedding model and embedding dimensions
-- [ ] Add `.env.example` entries for every backend setting.
-- [ ] Add `GET /health` and verify it locally.
-- [ ] Configure CORS from `ALLOWED_ORIGINS`, never `*` in production.
-
-### 1.2 Database models and migrations
-
-- [ ] Enable the `vector` extension in an explicit Alembic migration.
-- [ ] Create the `profiles` table keyed by `auth.users.id`.
-- [ ] Create the `chat_threads` table with owner and timestamps.
-- [ ] Create the `chat_messages` table with ordered user/assistant messages.
-- [ ] Create the `source_documents` table with:
-  - [ ] Ticker and company name
-  - [ ] CIK
-  - [ ] Form type
-  - [ ] Filing date
-  - [ ] Report/fiscal year
-  - [ ] Accession number
-  - [ ] SEC source URL
-  - [ ] Normalized Markdown content
-  - [ ] Content hash for idempotent ingestion
-- [ ] Create the `document_chunks` table with:
-  - [ ] Document ID
-  - [ ] Chunk index
-  - [ ] Chunk text
-  - [ ] Token count
-  - [ ] Page or section metadata
-  - [ ] Source offsets
-  - [ ] `vector(1536)` embedding column, or the configured model dimension
-  - [ ] Generated or maintained `tsvector` search column
-  - [ ] JSON metadata for citation display
-- [ ] Create the `message_citations` table linked to assistant messages and chunks.
-- [ ] Add unique constraints for accession numbers and document content hashes.
-- [ ] Add indexes for ticker, year, accession number, owner, and timestamps.
-- [ ] Add an HNSW vector index after validating the chosen embedding dimension.
-- [ ] Add a GIN full-text index.
-- [ ] Enable Row Level Security on user-owned tables.
-- [ ] Add RLS policies for profiles, threads, messages, and citations.
-- [ ] Add safe read policies for source documents and chunks.
-- [ ] Review every generated migration manually.
-- [ ] Run migrations using a direct/session database connection, not the transaction pooler.
-
-### 1.3 Authentication and authorization
-
-- [ ] Configure Supabase email authentication.
-- [ ] Restrict sign-in to Driftwood email addresses or an approved email domain.
-- [ ] Implement bearer-token extraction in FastAPI.
-- [ ] Implement Supabase JWT/user verification in `backend/app/auth/dependencies.py`.
-- [ ] Expose a typed `current_user` dependency.
-- [ ] Reject unauthenticated requests before retrieval or LLM work.
-- [ ] Verify thread ownership on every thread, message, and citation operation.
-- [ ] Add tests for missing, invalid, expired, and cross-user tokens.
-
-### 1.4 Backend API skeleton
-
-- [ ] Add API versioning, such as `/api/v1`.
-- [ ] Add typed request and response models.
-- [ ] Add thread endpoints:
-  - [ ] Create thread
-  - [ ] List current user's threads
-  - [ ] Get one owned thread
-  - [ ] Rename/archive a thread
-  - [ ] Load thread messages
-- [ ] Add a stub `POST /chat/stream` endpoint.
-- [ ] Return clear errors for `401`, `403`, `404`, `422`, `502`, and `500` cases.
-- [ ] Add request IDs and structured logs.
-- [ ] Add timeout and cancellation handling for long-running LLM requests.
-
-### Phase 1 verification
-
-- [ ] A clean backend starts with Uvicorn.
-- [ ] `/health` returns successfully.
-- [ ] Alembic creates the schema from an empty database.
-- [ ] RLS prevents one test user from reading another user's thread.
-- [ ] The stub streaming endpoint can be consumed by a simple HTTP client.
+- [x] Backend and data test suite passes: 83 tests.
+- [x] Frontend lint and production build pass locally.
+- [x] Alembic discovers revision `71c9d8a6b402` as the current head.
+- [ ] Format and lint the new ingestion files so the current Python CI job is green.
+- [ ] Fix the repository-level mypy package-name error caused by the root package layout.
+- [ ] Apply and test the migrations against a disposable or development Supabase database.
 
 ---
 
-## Phase 2 — Filing ingestion and citation-ready corpus
+## Remaining MVP work
 
-### 2.1 Normalize SEC filings
+### 1. Finish ingestion
 
-- [ ] Create `backend/app/ingestion/normalize.py`.
-- [ ] Parse downloaded SEC HTML safely.
-- [ ] Remove navigation, scripts, styles, and duplicate boilerplate.
-- [ ] Preserve headings, tables, list structure, and filing sections.
-- [ ] Normalize the filing into Markdown or structured text.
-- [ ] Preserve source offsets from normalized text back to the source document.
-- [ ] Preserve accession number, filing date, fiscal year, ticker, CIK, and SEC URL.
-- [ ] Decide how page citations will work because raw SEC HTML does not provide reliable pages.
-- [ ] If page citations are required, render filings to a stable paginated representation and store page numbers.
-- [ ] Otherwise define and document a section/anchor citation format that the client approves.
+- [ ] Clean up and test `Data/convert_to_markdown.py` and `Backend/app/Ingest/sec_tables.py`.
+- [ ] Split normalized Markdown into deterministic, section-aware chunks.
+- [ ] Generate OpenAI embeddings in batches.
+- [ ] Store documents and chunks in Supabase without duplicating accession numbers.
+- [ ] Run one ingestion command and confirm all 25 filings have searchable chunks.
 
-### 2.2 Chunk and embed
+### 2. Add retrieval
 
-- [ ] Create a deterministic chunking strategy based on sections and token limits.
-- [ ] Avoid splitting tables or important headings from their values.
-- [ ] Store neighboring-chunk relationships or reliable chunk indexes.
-- [ ] Add token counting and chunk-size tests.
-- [ ] Create embeddings in batches.
-- [ ] Add rate limiting, retries, and resumability to embedding jobs.
-- [ ] Make ingestion idempotent using accession number/content hash.
-- [ ] Do not create duplicate documents or chunks on rerun.
-- [ ] Store the embedding model and dimension in document metadata.
-- [ ] Add a dry-run mode that reports documents/chunks without writing data.
-- [ ] Add a command such as:
+Keep the first version simple: vector search plus company/year filters is enough for the demo.
 
-  ```text
-  uv run python -m backend.app.ingestion.cli --input Data/downloads
-  ```
+- [ ] Embed the user's question.
+- [ ] Query the most similar chunks with `pgvector`.
+- [ ] Support optional ticker and fiscal-year filters.
+- [ ] Return each passage with company, filing date, section, excerpt, and SEC URL.
+- [ ] Test retrieval with 5–10 representative questions from `Docs/client_brief.md`.
 
-### 2.3 Ingestion quality checks
+### 3. Generate grounded answers
 
-- [ ] Verify every configured company/year has exactly one source document.
-- [ ] Verify every document has non-empty normalized text.
-- [ ] Verify chunks contain meaningful text rather than HTML boilerplate.
-- [ ] Verify important sections exist where expected: Business, Risk Factors, MD&A, and financial statements.
-- [ ] Verify tables are readable enough for revenue, margin, and segment questions.
-- [ ] Verify every chunk has citation metadata.
-- [ ] Create a small ingestion fixture for automated tests.
-- [ ] Produce an ingestion report with document, chunk, token, and failure counts.
+- [ ] Add one PydanticAI/OpenAI assistant that receives only retrieved passages.
+- [ ] Instruct it to cite factual claims and say when the corpus lacks evidence.
+- [ ] Validate that every returned citation references one of the retrieved chunks.
+- [ ] Save the completed answer and citations with the conversation.
+- [ ] Replace the current stub response while keeping the existing SSE contract.
 
-### Phase 2 verification
+### 4. Complete the chat UI
 
-- [ ] The complete pilot corpus can be ingested from an empty database.
-- [ ] Rerunning ingestion produces no duplicate documents or chunks.
-- [ ] A chunk can be traced to a filing, section/page, and source offset.
-- [ ] A human can inspect several normalized filings and confirm that tables and headings survived.
+- [ ] Enable the message composer and prevent duplicate submissions.
+- [ ] Send authenticated messages to `POST /chat/stream`.
+- [ ] Render text while it streams and provide a stop button.
+- [ ] Render citation cards with filing metadata, excerpt, and SEC link.
+- [ ] Refresh the thread history after a completed response.
+- [ ] Show a clear insufficient-evidence state.
+
+### 5. Demo and deploy
+
+- [ ] Apply migrations and ingest the corpus into the development Supabase project.
+- [ ] Verify sign-up, sign-in, chat, citations, history, and sign-out end to end.
+- [ ] Confirm one account cannot read another account's conversations.
+- [ ] Deploy the backend and frontend.
+- [ ] Add screenshots, a short architecture summary, and demo instructions to `README.md`.
+- [ ] Record a short fallback demo video if the hosted services are unavailable.
 
 ---
 
-## Phase 3 — Retrieval
+## Optional improvements — not required for the resume MVP
 
-### 3.1 Semantic retrieval
-
-- [ ] Implement query embedding generation.
-- [ ] Implement bounded `pgvector` similarity search.
-- [ ] Filter retrieval by available corpus metadata when the user asks about a company or year.
-- [ ] Return source document and citation metadata with every result.
-- [ ] Add configurable top-k limits.
-- [ ] Add tests for empty, long, and company/year-filtered queries.
-
-### 3.2 Lexical retrieval
-
-- [ ] Implement Postgres full-text search over chunk text.
-- [ ] Add language/configuration appropriate for SEC filings.
-- [ ] Implement ranked keyword results.
-- [ ] Add tests for exact terms such as `operating margin`, `risk factors`, and `Data Center`.
-
-### 3.3 Hybrid retrieval and context assembly
-
-- [ ] Implement Reciprocal Rank Fusion in `retrieval/fusion.py`.
-- [ ] Deduplicate results by chunk ID.
-- [ ] Fetch neighboring chunks for context without exceeding token limits.
-- [ ] Preserve ranking explanations for debugging.
-- [ ] Add optional metadata filters for ticker, company, form, and year.
-- [ ] Implement bounded tools such as `search_filings`, `read_chunk`, and `read_surrounding_chunks`.
-- [ ] Add retrieval evaluation data based on the ten client questions.
-- [ ] Measure recall and inspect failed retrievals manually.
-
-### Phase 3 verification
-
-- [ ] Each client example question retrieves at least one relevant passage.
-- [ ] Exact keyword questions work even when semantic similarity is weak.
-- [ ] Multi-year comparison questions retrieve evidence from all requested years.
-- [ ] Retrieval never returns chunks outside the requested company/year filters.
-
----
-
-## Phase 4 — Grounded assistant and streaming backend
-
-### 4.1 Typed agent
-
-- [ ] Create `assistant/deps.py` with request-scoped dependencies.
-- [ ] Create typed models for `Citation`, `SourcePassage`, and `GroundedAnswer`.
-- [ ] Create `assistant/agent.py` using PydanticAI.
-- [ ] Define the agent system instructions in a separate file.
-- [ ] Require answers to use only retrieved passages.
-- [ ] Require citations for factual claims.
-- [ ] Require an explicit insufficient-evidence response when context is inadequate.
-- [ ] Prohibit trading recommendations, stock picks, and unsupported inference.
-- [ ] Keep the model from inventing page numbers, filing dates, or citations.
-
-### 4.2 Grounding enforcement
-
-- [ ] Implement `grounding/validator.py`.
-- [ ] Verify every citation maps to a chunk retrieved for the current request.
-- [ ] Verify cited passages belong to the requested corpus.
-- [ ] Verify the citation contains company, filing, date, page/section, and excerpt metadata.
-- [ ] Require at least one citation for supported factual answers.
-- [ ] Permit zero citations only for a controlled insufficient-evidence response.
-- [ ] Reject or repair invalid model output rather than returning polished unsupported text.
-- [ ] Add tests for fabricated chunk IDs, wrong documents, missing citations, and unsupported claims.
-
-### 4.3 Chat orchestration and persistence
-
-- [ ] Implement the end-to-end turn lifecycle in `chat/orchestrator.py`.
-- [ ] Load and validate the owned thread.
-- [ ] Persist the user message.
-- [ ] Retrieve context.
-- [ ] Run the typed agent.
-- [ ] Validate grounding and citations.
-- [ ] Persist the assistant message and normalized citations after successful completion.
-- [ ] Store model, token usage, latency, and retrieval metadata.
-- [ ] Ensure failed runs do not create misleading complete assistant messages.
-
-### 4.4 Streaming
-
-- [ ] Implement `POST /chat/stream`.
-- [ ] Accept the AI SDK UI message format.
-- [ ] Translate wire messages to internal message types.
-- [ ] Stream text deltas.
-- [ ] Stream citation/source metadata as structured parts.
-- [ ] Stream clear error events.
-- [ ] Support request cancellation and timeouts.
-- [ ] Test the stream with an authenticated client.
-
-### Phase 4 verification
-
-- [ ] A question produces a streamed answer.
-- [ ] The final answer contains validated citations.
-- [ ] An unsupported question produces a clear insufficient-evidence response.
-- [ ] A fabricated citation cannot pass the validator.
-- [ ] Completed messages and citations survive a server restart.
-
----
-
-## Phase 5 — Frontend
-
-### 5.1 Frontend foundation
-
-- [ ] Create a Vite + React + TypeScript SPA.
-- [ ] Add React Router.
-- [ ] Add Tailwind CSS and shadcn/ui.
-- [ ] Add `@supabase/supabase-js`.
-- [ ] Add the Vercel AI SDK UI packages compatible with the installed version.
-- [ ] Configure `VITE_API_BASE_URL`.
-- [ ] Configure `VITE_SUPABASE_URL`.
-- [ ] Configure `VITE_SUPABASE_ANON_KEY`.
-- [ ] Create `src/lib/env.ts` as the only frontend environment-variable access point.
-- [ ] Never expose backend service-role or OpenAI credentials.
-
-### 5.2 Authentication UI
-
-- [ ] Create the Supabase browser client in `src/lib/supabase.ts`.
-- [ ] Implement sign-in with email/password or the approved email flow.
-- [ ] Enforce the Driftwood email-domain rule in the UI and backend.
-- [ ] Implement session restoration on page reload.
-- [ ] Implement sign-out.
-- [ ] Add loading, invalid-login, expired-session, and unauthorized states.
-
-### 5.3 Shared API and chat state
-
-- [ ] Create `src/lib/http.ts`.
-- [ ] Inject the current Supabase access token into backend requests.
-- [ ] Add request timeouts and typed API errors.
-- [ ] Create `src/lib/api.ts` for threads and message history.
-- [ ] Add a chat route and thread route.
-- [ ] Connect `useChat`/AI SDK transport to FastAPI `/chat/stream`.
-- [ ] Load stored messages when opening a thread.
-- [ ] Create a new thread when starting a conversation.
-- [ ] Update thread titles from the first user question or an explicit rename action.
-
-### 5.4 Chat and citation experience
-
-- [ ] Build the chat layout.
-- [ ] Build the thread list/sidebar.
-- [ ] Render user and assistant messages.
-- [ ] Render streaming status and cancellation controls.
-- [ ] Render Markdown safely.
-- [ ] Render citations inline or beside the relevant claims.
-- [ ] Render source filing, company, year, accession number, and page/section.
-- [ ] Render the underlying source passage in an expandable panel.
-- [ ] Link to the SEC source URL.
-- [ ] Add empty states and example questions from the client brief.
-- [ ] Add clear insufficient-evidence states.
-- [ ] Add network, authentication, retrieval, and grounding error states.
-- [ ] Prevent accidental duplicate submissions.
-- [ ] Ensure the UI is usable on common laptop screen sizes.
-
-### Phase 5 verification
-
-- [ ] An analyst can sign in, create a thread, ask a question, and see a streamed answer.
-- [ ] Refreshing the browser preserves the session and conversation history.
-- [ ] Citation links and passages are readable and verifiable.
-- [ ] A user cannot see another user's thread in the UI or API.
-- [ ] The frontend never contains a service-role key or OpenAI key.
-
----
-
-## Phase 6 — End-to-end evaluation and trust testing
-
-- [ ] Convert the ten example questions in the client brief into an evaluation set.
-- [ ] Add expected companies, years, sections, and evidence requirements for each question.
-- [ ] Test single-year factual questions.
-- [ ] Test multi-year comparisons.
-- [ ] Test questions requiring multiple companies.
-- [ ] Test financial tables and segment margins.
-- [ ] Test risk-factor language changes.
-- [ ] Test supplier concentration and geographic exposure questions.
-- [ ] Test questions that ask for conclusions not proven by the filings.
-- [ ] Confirm unsupported questions are refused rather than answered from general model knowledge.
-- [ ] Manually review citation correctness for every evaluation question.
-- [ ] Measure retrieval relevance, citation validity, answer support, latency, and token cost.
-- [ ] Add regression tests for every discovered failure.
-- [ ] Create a corpus refresh procedure for new 10-K and 10-Q filings.
-
-### Trust and security review
-
-- [ ] Confirm all answers are generated only from retrieved corpus passages.
-- [ ] Confirm every factual claim has a citation or is explicitly qualified.
-- [ ] Confirm source excerpts exactly match stored source text.
-- [ ] Confirm page/section metadata is stable after re-ingestion.
-- [ ] Confirm RLS and backend ownership checks are both active.
-- [ ] Confirm secrets are absent from Git, browser bundles, logs, and error responses.
-- [ ] Confirm rate limits and request size limits are configured.
-- [ ] Confirm prompt injection in filing text cannot override system instructions.
-- [ ] Confirm HTML parsing sanitizes untrusted document content.
-
----
-
-## Phase 7 — Deployment and pilot
-
-### Railway and Supabase
-
-- [ ] Create the Supabase project.
-- [ ] Configure Supabase Auth and the approved Driftwood email policy.
-- [ ] Apply Alembic migrations to Supabase Postgres.
-- [ ] Verify `pgvector`, full-text indexes, and RLS policies in the deployed database.
-- [ ] Create the Railway backend service.
-- [ ] Configure backend secrets in Railway.
-- [ ] Create the Railway frontend service.
-- [ ] Configure frontend build and runtime variables.
-- [ ] Configure production CORS for the frontend origin.
-- [ ] Configure health checks and restart behavior.
-- [ ] Add production logging and error monitoring.
-- [ ] Document the deployment and rollback process.
-
-### Pilot readiness
-
-- [ ] Ingest the final pilot corpus into the deployed database.
-- [ ] Run the full evaluation set against production.
-- [ ] Invite five senior analysts.
-- [ ] Provide a short usage guide with example questions.
-- [ ] Capture feedback on answer correctness, citation usefulness, latency, and time saved.
-- [ ] Track failed questions and add them to regression tests.
-- [ ] Measure whether the pilot saves at least three hours per analyst per week.
-- [ ] Fix blocking trust, auth, and data-quality issues before firm-wide rollout.
-- [ ] Prepare an operations runbook for corpus refreshes, incidents, and database recovery.
+- [ ] Combine vector and full-text results with Reciprocal Rank Fusion.
+- [ ] Add neighboring-chunk expansion and retrieval scoring diagnostics.
+- [ ] Add exact source offsets or stable page-level citations.
+- [ ] Add thread rename, archive, and delete actions.
+- [ ] Add request IDs, detailed usage metrics, and cost dashboards.
+- [ ] Add exhaustive concurrency, cancellation, and database integration tests.
+- [ ] Add a formal evaluation pipeline for every client-brief question.
+- [ ] Add organization-domain restrictions and admin/user profile management.
+- [ ] Add production monitoring, rate limits, backup procedures, and incident runbooks.
+- [ ] Run a multi-user analyst pilot and measure time saved.

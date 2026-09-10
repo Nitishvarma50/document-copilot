@@ -14,5 +14,7 @@ wheels/
 .env.*
 !.env.example
 
-# Downloaded SEC filings
+# Generated SEC corpus data (local inputs and outputs)
 Data/downloads/
+Data/markdown/
+Data/cleaned/

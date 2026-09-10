@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from typing import Annotated
 
+import httpx
 from app.config import settings
+from app.Database.supabase import managed_client
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from supabase import acreate_client
-from supabase.lib.client_options import AsyncClientOptions
-from supabase_auth.errors import AuthApiError
+from supabase_auth.errors import AuthApiError, AuthRetryableError
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -36,7 +37,7 @@ async def get_access_token(
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise _unauthorized()
     token = credentials.credentials.strip()
-    if not token:
+    if not token or len(token.split()) != 1:
         raise _unauthorized()
     return token
 
@@ -44,19 +45,17 @@ async def get_access_token(
 async def get_current_user(
     access_token: Annotated[str, Depends(get_access_token)],
 ) -> CurrentUser:
-    client = await acreate_client(
-        settings.supabase_url,
-        settings.supabase_anon_key,
-        options=AsyncClientOptions(
-            auto_refresh_token=False,
-            persist_session=False,
-        ),
-    )
     try:
-        response = await client.auth.get_user(jwt=access_token)
+        async with asyncio.timeout(settings.supabase_request_timeout_seconds):
+            async with managed_client() as client:
+                response = await client.auth.get_user(jwt=access_token)
     except AuthApiError as exc:
-        raise _unauthorized("Invalid or expired token") from exc
-    if response.user is None or response is None or not response.user.email:
+        if exc.status in (400, 401, 403, 422):
+            raise _unauthorized("Invalid or expired token") from exc
+        raise HTTPException(503, "Authentication service unavailable") from exc
+    except (AuthRetryableError, httpx.HTTPError, TimeoutError) as exc:
+        raise HTTPException(503, "Authentication service unavailable") from exc
+    if response is None or response.user is None or not response.user.email:
         raise _unauthorized("Invalid or expired token")
     return CurrentUser(
         id=uuid.UUID(response.user.id),

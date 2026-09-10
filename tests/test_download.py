@@ -78,14 +78,25 @@ def test_distinguishes_filing_year_from_report_year() -> None:
     assert filings[0]["report_year"] == "2024"
 
 
-def test_finds_existing_company_year_filing(tmp_path: Path) -> None:
+def test_finds_only_the_exact_existing_filing(tmp_path: Path) -> None:
     year_dir = tmp_path / "2025"
     year_dir.mkdir()
-    expected = year_dir / "aapl_10-k_2025-01-01_accession.htm"
-    expected.write_text("filing", encoding="utf-8")
+    filing = {
+        "form": "10-K",
+        "filing_year": "2025",
+        "filing_date": "2025-02-07",
+        "accession_number": "0001018724-25-000004",
+        "primary_document": "amzn-20241231.htm",
+    }
+    stale = year_dir / "amzn_10-k_2026-02-06_0001018724-26-000004.htm"
+    stale.write_text("stale filing", encoding="utf-8")
 
-    assert find_existing_filing(tmp_path, "AAPL", "10-K", "2025") == expected
-    assert find_existing_filing(tmp_path, "MSFT", "10-K", "2025") is None
+    assert find_existing_filing(tmp_path, "AMZN", filing) is None
+
+    expected = year_dir / "amzn_10-k_2025-02-07_0001018724-25-000004.htm"
+    expected.write_text("expected filing", encoding="utf-8")
+
+    assert find_existing_filing(tmp_path, "AMZN", filing) == expected
 
 
 def test_manifest_path_is_relative_and_portable() -> None:

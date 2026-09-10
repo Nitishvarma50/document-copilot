@@ -45,7 +45,7 @@ class ChatMessage(Base):
         Enum(MessageRole, name="message_role", native_enum=False), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    parts: Mapped[list[str]] = mapped_column(JSONB, nullable=True)
+    parts: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

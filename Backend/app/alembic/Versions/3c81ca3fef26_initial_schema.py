@@ -74,7 +74,7 @@ def upgrade() -> None:
             name="uq_source_documents_accession_number",
         ),
     )
-    op.create_table(
+    op.create_index(
         "ix_source_documents_ticker_fiscal_year",
         "source_documents",
         ["ticker", "fiscal_year"],
@@ -216,12 +216,12 @@ def upgrade() -> None:
     op.create_index(
         "ix_chat_messages_thread_id",
         "chat_messages",
-        "thread_id",
+        ["thread_id"],
         unique=False,
     )
 
     op.create_table(
-        "messages_citations",
+        "message_citations",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("message_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("chunk_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -258,7 +258,7 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_messages_citations_chunk_id",
-        "messages_citations",
+        "message_citations",
         ["message_id"],
         unique=False,
     )
@@ -269,8 +269,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     _drop_rls_and_policies()
 
-    op.drop_index("ix_messages_citations_chunk_id", table_name="messages_citations")
-    op.drop_table("messages_citations")
+    op.drop_index("ix_messages_citations_chunk_id", table_name="message_citations")
+    op.drop_table("message_citations")
 
     op.drop_index("ix_chat_messages_thread_id", table_name="chat_messages")
     op.drop_table("chat_messages")
@@ -300,12 +300,12 @@ def _enable_rls_and_policies() -> None:
         "document_chunks",
         "chat_threads",
         "chat_messages",
-        "messages_citations",
+        "message_citations",
     ):
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
     op.execute(
         """
-        CREATE POLICY user_select_own
+        CREATE POLICY users_select_own
         ON users
         FOR SELECT
         TO authenticated
@@ -325,6 +325,15 @@ def _enable_rls_and_policies() -> None:
     op.execute(
         """
         CREATE POLICY source_documents_select_authenticated
+        ON source_documents
+        FOR SELECT
+        TO authenticated
+        USING (true)
+        """
+    )
+    op.execute(
+        """
+        CREATE POLICY document_chunks_select_authenticated
         ON document_chunks
         FOR SELECT
         TO authenticated

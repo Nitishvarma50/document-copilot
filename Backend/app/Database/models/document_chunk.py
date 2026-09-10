@@ -56,7 +56,7 @@ class DocumentChunk(Base):
     section: Mapped[str] = mapped_column(Text, nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(
-        Vector(dimensions=EMBEDDING_DIMENSIONS), nullable=True
+        Vector(EMBEDDING_DIMENSIONS), nullable=True
     )
     token_count: Mapped[int] = mapped_column(Integer, nullable=True)
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column(
@@ -66,4 +66,4 @@ class DocumentChunk(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     document: Mapped[SourceDocument] = relationship(back_populates="chunks")
-    citations: Mapped[list[MessageCitation]] = relationship(back_populates="chunks")
+    citations: Mapped[list[MessageCitation]] = relationship(back_populates="chunk")

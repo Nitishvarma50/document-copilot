@@ -11,6 +11,19 @@ from urllib import error, request
 
 from dotenv import load_dotenv
 
+if __package__:
+    from .filing_metadata import (
+        expected_filing_filename,
+        expected_source_url,
+        validate_download_manifest,
+    )
+else:
+    from filing_metadata import (  # type: ignore[import-not-found, no-redef]
+        expected_filing_filename,
+        expected_source_url,
+        validate_download_manifest,
+    )
+
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -156,12 +169,12 @@ def extract_filings(
 
 
 def find_existing_filing(
-    output_dir: Path, ticker: str, form: str, filing_year: str
+    output_dir: Path, ticker: str, filing: dict[str, str]
 ) -> Path | None:
-    """Find an existing local filing for a company, form, and filing year."""
-    year_dir = output_dir / filing_year
-    matches = sorted(year_dir.glob(f"{ticker.lower()}_{form.lower()}_*"))
-    return matches[0] if matches else None
+    """Find only the local file whose name matches the SEC filing metadata."""
+    record = {**filing, "ticker": ticker}
+    path = output_dir / filing["filing_year"] / expected_filing_filename(record)
+    return path if path.is_file() else None
 
 
 def manifest_relative_path(path: Path) -> str:
@@ -221,51 +234,41 @@ def download_filings() -> dict:
             )
 
         for filing in filings[:FILINGS_PER_COMPANY]:
-            accession_path = filing["accession_number"].replace("-", "")
-            source_url = (
-                "https://www.sec.gov/Archives/edgar/data/"
-                f"{int(cik)}/{accession_path}/{filing['primary_document']}"
-            )
+            record = {
+                "ticker": ticker,
+                "company_name": company["name"],
+                "cik": cik,
+                **filing,
+            }
+            source_url = expected_source_url(record)
             year_dir = OUTPUT_DIR / filing["filing_year"]
             year_dir.mkdir(parents=True, exist_ok=True)
-            existing_files = sorted(
-                year_dir.glob(f"{ticker.lower()}_{filing['form'].lower()}_*")
-            )
-            if existing_files:
-                local_path = existing_files[0]
+            local_path = find_existing_filing(OUTPUT_DIR, ticker, filing)
+            if local_path:
                 print(
-                    f"Skipping {ticker} {filing['filing_year']}: filing already exists"
+                    f"Skipping {ticker} {filing['filing_year']}: exact filing "
+                    "already exists"
                 )
             else:
-                local_path = year_dir / (
-                    f"{ticker.lower()}_{filing['form'].lower()}_"
-                    f"{filing['filing_date']}_{filing['accession_number']}"
-                    f"{Path(filing['primary_document']).suffix or '.html'}"
-                )
+                local_path = year_dir / expected_filing_filename(record)
                 local_path.write_bytes(
                     get_bytes(source_url, accept="text/html,application/xhtml+xml")
                 )
 
             manifest["filings"].append(
                 {
-                    "ticker": ticker,
-                    "company_name": company["name"],
-                    "cik": cik,
-                    "filing_year": filing["filing_year"],
-                    "report_year": filing["report_year"],
-                    "form": filing["form"],
-                    "filing_date": filing["filing_date"],
-                    "accession_number": filing["accession_number"],
-                    "primary_document": filing["primary_document"],
+                    **record,
                     "source_url": source_url,
-                    "local_path": str(local_path.relative_to(PROJECT_ROOT)),
+                    "local_path": manifest_relative_path(local_path),
                 }
             )
             manifest["download_count"] += 1
             write_manifest(manifest)
             time.sleep(REQUEST_DELAY_SECONDS)
 
-    return manifest
+    validated_manifest = validate_download_manifest(manifest)
+    write_manifest(validated_manifest)
+    return validated_manifest
 
 
 if __name__ == "__main__":

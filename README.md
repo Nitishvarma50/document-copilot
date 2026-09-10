@@ -35,9 +35,27 @@ Filings are saved under `Data/downloads/`. The generated manifest is at:
 Data/downloads/manifest.json
 ```
 
-The pilot corpus is configured in `config/corpus.json`, which is the single source of truth for companies, filing forms, and the filing-year lookback period. The initial pilot contains Apple, Amazon, Alphabet, Microsoft, and NVIDIA. Edit the configuration file rather than hardcoding corpus settings in the downloader.
+## Data processing layers
 
-The downloader selects the previous five complete filing years relative to the current UTC year and excludes the current partial year. The manifest distinguishes `filing_year` from `report_year` because a 10-K may be filed in the calendar year after the fiscal period it covers.
+The corpus uses separate directories so cleaning never overwrites its source data:
+
+```text
+Data/downloads/  Raw SEC filings and source manifest; never modified by cleaning
+Data/markdown/   Generated, uncleaned Markdown and table data; cleaning input
+Data/cleaned/    Generated cleaned documents; cleaning output
+```
+
+Treat `Data/downloads/` and `Data/markdown/` as read-only inputs. The cleaning process must read from `Data/markdown/` and write new artifacts only to `Data/cleaned/`. These generated directories are intentionally excluded from Git.
+
+The pilot corpus is configured in `Data/config/corpus.json`, which is the single source of truth for companies, filing forms, and the filing-year lookback period. The initial pilot contains Apple, Amazon, Alphabet, Microsoft, and NVIDIA. Edit the configuration file rather than hardcoding corpus settings in the downloader.
+
+The downloader selects the previous five complete filing years relative to the current UTC year and excludes the current partial year. The manifest distinguishes `filing_year` from `report_year` because a 10-K may be filed in the calendar year after the fiscal period it covers. Existing downloads are reused only when their exact filing date and accession-number filename matches the SEC metadata.
+
+Validate the download and converted manifests before cleaning:
+
+```bat
+uv run python -m Data.filing_metadata
+```
 
 ## Project layout
 

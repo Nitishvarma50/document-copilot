@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import computed_field
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     openai_agent_request_limit: int = 20
 
     allowed_origins: str = "http://localhost:5173"
+    supabase_request_timeout_seconds: float = Field(default=10, gt=0, le=60)
+    chat_turn_timeout_seconds: float = Field(default=30, gt=0, le=60)
 
     @computed_field
     @property
