@@ -173,6 +173,11 @@ def test_repository_manifests_are_valid() -> None:
     root = Path(__file__).resolve().parents[1]
     download_path = root / "Data/downloads/manifest.json"
     markdown_path = root / "Data/markdown/manifest.json"
+    if not download_path.exists() and not markdown_path.exists():
+        pytest.skip("generated corpus manifests are not present")
+
+    assert download_path.is_file(), f"Missing {download_path}"
+    assert markdown_path.is_file(), f"Missing {markdown_path}"
     source = json.loads(download_path.read_text(encoding="utf-8"))
     markdown = json.loads(markdown_path.read_text(encoding="utf-8"))
 
